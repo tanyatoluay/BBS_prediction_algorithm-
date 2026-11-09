@@ -1,0 +1,14 @@
+# ---- never commit patient-level data or derived outputs ----
+*.xlsx
+*.xls
+*.csv
+!config/*_TEMPLATE.csv
+*.rds
+*.RData
+*.Rhistory
+output/
+# review notes contain participant IDs
+REVIEW_*.md
+# OS / editor
+.DS_Store
+.Rproj.user/
