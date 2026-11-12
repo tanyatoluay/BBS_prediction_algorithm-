@@ -2,7 +2,6 @@
 
 ![R](https://img.shields.io/badge/R-%E2%89%A5%204.3-276DC3?logo=r&logoColor=white)
 ![Reproducible](https://img.shields.io/badge/run__all.R-one%20command-success)
-![Checks](https://img.shields.io/badge/manuscript%20checks-tables%20%2B%20text-blueviolet)
 ![Data](https://img.shields.io/badge/data-not%20included-lightgrey)
 
 Analysis code for the **WEGIO** study (*Whole Genetic Approach in Early Genetic Identification of Obesity*), a multicentre cohort of 1004 participants with severe early-onset obesity or obesity with retinal disease who underwent exome sequencing with copy-number analysis.
@@ -15,7 +14,7 @@ The workflow takes the study's genetic database and electronic case-report form 
 - **Score A**, a six-item clinical score for BBS: derivation, internal validation, calibration and site-level robustness
 - age-stratum, eligibility-route and other sensitivity analyses
 
-It then **checks the manuscript against the data**, cell by cell for every table and claim by claim for every number in the text.
+Every table, figure and reported number is produced by the code from the source data, so anyone with access to the data can reproduce the results with one command.
 
 > **No data are included in this repository.** The input files contain pseudonymised participant-level data and are available only within the study team (see [Data protection](#data-protection)).
 
@@ -26,16 +25,15 @@ It then **checks the manuscript against the data**, cell by cell for every table
 1. [Pipeline at a glance](#pipeline-at-a-glance)
 2. [Script-level workflow](#script-level-workflow)
 3. [Data schema](#data-schema)
-4. [Verification against the manuscript](#verification-against-the-manuscript)
-5. [Results figures](#results-figures)
-6. [Analysis decisions](#analysis-decisions)
-7. [Repository structure](#repository-structure)
-8. [Requirements and setup](#requirements-and-setup)
-9. [Key definitions](#key-definitions)
-10. [Statistical methods](#statistical-methods)
-11. [Reproducibility notes](#reproducibility-notes)
-12. [Data protection](#data-protection)
-13. [Author and license](#author-and-license)
+4. [Results figures](#results-figures)
+5. [Analysis decisions](#analysis-decisions)
+6. [Repository structure](#repository-structure)
+7. [Requirements and setup](#requirements-and-setup)
+8. [Key definitions](#key-definitions)
+9. [Statistical methods](#statistical-methods)
+10. [Reproducibility notes](#reproducibility-notes)
+11. [Data protection](#data-protection)
+12. [Author and license](#author-and-license)
 
 ---
 
@@ -46,18 +44,15 @@ flowchart LR
     A["Inputs<br/>genetic database V21.0<br/>eCRF export V4.0<br/>BBS evidence categories"]:::input
     B["Build<br/>analysis dataset<br/>N = 1004"]:::build
     C["Analyse<br/>descriptives · criteria<br/>Score A · validation<br/>sensitivity analyses"]:::analyse
-    D["Outputs<br/>tables · figures<br/>manuscript values"]:::out
-    E["Verify<br/>tables cell by cell<br/>text claim by claim"]:::check
-    A --> B --> C --> D --> E
-    M["Manuscript .docx"]:::input -.-> E
+    D["Outputs<br/>results tables · figures<br/>reported values"]:::out
+    A --> B --> C --> D
     classDef input fill:#eef2f7,stroke:#5b7083,color:#1b2a38
     classDef build fill:#e8f4ea,stroke:#3d7a4a,color:#14301b
     classDef analyse fill:#fff4e0,stroke:#b07a1a,color:#3d2a05
     classDef out fill:#f3e8f7,stroke:#7a4a8a,color:#2c1533
-    classDef check fill:#fde8e8,stroke:#a63d3d,color:#3a1111
 ```
 
-One command runs everything (about 1 minute):
+One command runs the complete analysis (about 1 minute):
 
 ```bash
 Rscript R_workflow_V25/run_all.R
@@ -89,15 +84,13 @@ flowchart TD
     RDS --> S05["05_age_route_nonBBS.R<br/>eligibility route · Table S6"]
     S04 --> S06["06_figures.R<br/>Figures 2, 3, S1, S2"]
 
-    S02 & S03 & S04 & S04B & S04C & S04D & S05 --> S08["08_manuscript_values.R<br/>all reported numbers"]
-    S02 & S03 & S04 & S05 --> S09["09_manuscript_tables.R<br/>all tables in manuscript layout"]
-    S09 --> S10["10_compare_docx.R<br/>table check"]
-    S08 --> S11["11_text_values.R<br/>text check + coverage"]
-    S02 & S04 --> S07["07_check_manuscript.R<br/>reproduction of V25 (legacy score)"]
-    DOCX["manuscript .docx"] -.-> S10 & S11
+    S02 & S03 & S04 & S04B & S04C & S04D & S05 --> S07["07_results_values.R<br/>all reported numbers"]
+    S02 & S03 & S04 & S05 --> S08["08_results_tables.R<br/>all tables in publication layout"]
+    S07 --> V[("results_values.json")]
+    S08 --> T[("results_tables.xlsx")]
     S06 --> FIG["docs/figures/"]
 
-    RUN(["run_all.R"]) -. runs 00 → 11 .-> CFG
+    RUN(["run_all.R"]) -. runs 00 → 08 .-> CFG
 ```
 
 ---
@@ -156,34 +149,6 @@ Derived variables are documented in [Key definitions](#key-definitions).
 
 ---
 
-## Verification against the manuscript
-
-```mermaid
-flowchart LR
-    R["R results"] --> T["09 → 10<br/>table check<br/><b>2467 cells</b>"]
-    R --> X["08 → 11<br/>text check<br/><b>161 claims</b>"]
-    D["Manuscript .docx<br/>(accepted view of<br/>tracked changes)"] --> T & X
-    T --> T1["0 mismatches"]:::ok
-    X --> X1["0 mismatches<br/>0 data numbers<br/>not covered"]:::ok
-    classDef ok fill:#e8f4ea,stroke:#3d7a4a,color:#14301b
-```
-
-| Check | Script | What it does | Status (manuscript V25.2) |
-|---|---|---|---|
-| Tables | `09` → `10` | Rebuilds tables 1, 2, 4–8 and S2, S4–S8, S11, S13–S16 in the manuscript layout and compares every cell | 2467 cells, 0 mismatches |
-| Text | `08` → `11` | Generates every numeric statement from the data and checks it appears verbatim; lists any number no claim accounts for | 161 claims, 0 mismatches, 0 uncovered data numbers |
-| V25 reproduction | `07` | Reproduces 67 values of the earlier manuscript V25 (legacy Score A) | 59/67 match; differences documented |
-
-Statements that rest on genetic classification inputs are checked for presence only: enrolment flow, gene and variant counts, secondary findings, the 2b disease categories and the nested diagnosis rules. Table 3, S1, S2b, S3, S10 and S12 are classifications or mappings and are not rebuilt.
-
-To check another manuscript version:
-
-```bash
-MANUSCRIPT_DOCX="/path/to/manuscript.docx" Rscript R_workflow_V25/run_all.R
-```
-
----
-
 ## Results figures
 
 > Aggregate results of an unpublished manuscript. Keep the repository private until publication (see [Data protection](#data-protection)). The images are regenerated by `run_all.R`.
@@ -229,8 +194,8 @@ Decisions taken on statistical grounds during the re-analysis (November 2026). E
 
 ```
 R_workflow_V25/
-├── run_all.R                              # entry point: runs 00 → 11, refreshes docs/figures
-├── WEGIO_V25_step_by_step_validation.Rmd  # step-by-step report, one decision per step (→ Word)
+├── run_all.R                              # entry point: runs 00 → 08, refreshes docs/figures
+├── WEGIO_step_by_step_analysis.Rmd        # step-by-step report, one decision per step (→ Word)
 ├── R/
 │   ├── 00_config.R                        # paths, constants, seeds, Score A points, helpers
 │   ├── 01_build_dataset.R                 # analysis dataset (N = 1004), derived variables, QC files
@@ -242,12 +207,8 @@ R_workflow_V25/
 │   ├── 04d_cluster_bootstrap.R            # site-cluster bootstrap CIs
 │   ├── 05_age_route_nonBBS.R              # eligibility route, age contrasts, non-BBS model (S6)
 │   ├── 06_figures.R                       # figures 2, 3, S1, S2
-│   ├── 07_check_manuscript.R              # reproduction of manuscript V25 (legacy Score A)
-│   ├── 08_manuscript_values.R             # all reported numbers -> output/manuscript_values.json
-│   ├── 09_manuscript_tables.R             # all data-derived tables in manuscript layout
-│   ├── 10_compare_docx.R                  # table check against the manuscript .docx
-│   ├── 11_text_values.R                   # text check against the manuscript .docx, with coverage
-│   └── read_docx_tables.R                 # reads .docx tables and paragraphs (accepted view)
+│   ├── 07_results_values.R                # every reported number -> output/results_values.json
+│   └── 08_results_tables.R                # every data-derived table in publication layout -> output/results_tables.xlsx
 ├── config/
 │   └── bbs_evidence_categories_TEMPLATE.csv
 ├── docs/
@@ -263,7 +224,7 @@ R_workflow_V25/
 **Requirements**
 
 - R ≥ 4.3 (developed on R 4.5.2, macOS)
-- Packages: `readxl`, `dplyr`, `tidyr`, `stringr`, `purrr`, `logistf`, `pROC`, `binom`, `exact2x2`, `ggplot2`, `patchwork`, `writexl`, `xml2`, `jsonlite`. `run_all.R` installs any that are missing from CRAN.
+- Packages: `readxl`, `dplyr`, `tidyr`, `stringr`, `purrr`, `logistf`, `pROC`, `binom`, `exact2x2`, `ggplot2`, `patchwork`, `writexl`, `jsonlite`. `run_all.R` installs any that are missing from CRAN.
 - Optional, for the Word report: `rmarkdown` and pandoc (shipped with RStudio).
 - A UTF-8 locale (set automatically in `00_config.R`).
 
@@ -283,7 +244,6 @@ R_workflow_V25/
    | `WEGIO_all_genetic_results_20261104_V21.0_VSK.xlsx` | Genetic database V21.0 (4 Nov 2026) |
    | `eCRF_Wegio_Export_Sheet_20261101_V4.0_PBE.xlsx` | eCRF export V4.0 (1 Nov 2026) |
    | `bbs_evidence_categories.csv` | `id,category` (A, B1, B2, C) for the 38 participants with BBS; format as in `config/bbs_evidence_categories_TEMPLATE.csv` |
-   | `WEGIO_manuscript_*.docx` | Manuscript to check (optional; set `MANUSCRIPT_DOCX`) |
 
 3. Run from the data folder:
 
@@ -294,7 +254,7 @@ R_workflow_V25/
    To run from elsewhere, set `WEGIO_DIR` to the data folder. To produce the step-by-step report in Word:
 
    ```bash
-   Rscript -e 'rmarkdown::render("R_workflow_V25/WEGIO_V25_step_by_step_validation.Rmd", knit_root_dir = getwd(), output_dir = "R_workflow_V25/output")'
+   Rscript -e 'rmarkdown::render("R_workflow_V25/WEGIO_step_by_step_analysis.Rmd", knit_root_dir = getwd(), output_dir = "R_workflow_V25/output")'
    ```
 
    Outside RStudio, set `RSTUDIO_PANDOC` to RStudio's pandoc folder, for example `/Applications/RStudio.app/Contents/Resources/app/quarto/bin/tools/aarch64`.
@@ -304,10 +264,8 @@ R_workflow_V25/
 | File | Content |
 |---|---|
 | `tables/0*_*.xlsx` | One workbook per analysis script, one sheet per table |
-| `manuscript_tables.xlsx` | All tables in manuscript layout |
-| `manuscript_values.json` | All reported numbers, formatted as in the manuscript |
-| `tables/10_docx_vs_R_mismatches.xlsx` | Table check: summary, mismatches, all cells |
-| `tables/11_text_check.xlsx` | Text check: claims and number coverage |
+| `results_tables.xlsx` | All data-derived tables of the manuscript in publication layout (tables 1, 2, 4–8; S2, S4–S8, S11, S13–S16) |
+| `results_values.json` | Every number reported in the text, formatted as in the manuscript |
 | `tables/check_*.xlsx` | Data-quality checks (VUS tiers, ages) |
 | `figures/*.png` | Figures at 300 dpi |
 | `sessionInfo.txt` | R and package versions |
@@ -359,7 +317,7 @@ R_workflow_V25/
 
 - All random procedures use `SEED_BOOT = 20261104` (`00_config.R`); bootstrap CIs are reproducible run to run. Group comparisons use exact tests, so they need no seed.
 - `01_build_dataset.R` writes data-quality files: `check_BBS_VUS_tiers.xlsx` (evidence categories vs V21.0 VUS tiers and the V18.6 re-scoring) and `check_data_quality_age.xlsx` (missing or negative ages).
-- `07_check_manuscript.R` documents the differences between this analysis and manuscript V25: Beales counting rule (88/62/46 vs 89/63/47), complete-case N (601 vs 619), bootstrap points in table S14, and Wald vs profile-likelihood CIs in table 6.
+- Tables 3, S1, S2b, S3, S10 and S12 of the manuscript are genetic classifications or variable mappings rather than statistical results and are not produced by the code.
 - `sessionInfo.txt` records the exact R and package versions of each run.
 
 ---

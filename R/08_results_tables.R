@@ -1,6 +1,6 @@
 # =============================================================================
-# 09 — Every data-derived manuscript table, rebuilt in the manuscript layout (character cells,
-#      mid-dot decimals). Runs after 01–08 in the same session. Output: output/manuscript_tables.xlsx
+# 08 — Results tables: every data-derived table of the manuscript, in publication layout (character cells,
+#      mid-dot decimals). Runs after 01–07 in the same session. Output: output/results_tables.xlsx
 #      Tables whose content is a genetic/biological classification (table 3, S3, S10, S2b, S1 mapping,
 #      genotype column of S4) are inputs, not statistics, and are not rebuilt here.
 # =============================================================================
@@ -196,6 +196,6 @@ st <- st[match(c("10", "39", "16"), st$site), ]
 MT$tableS16 <- rbind(mat(lapply(seq_len(nrow(st)), function(i) c(st$site[i], st$n[i], st$b[i], st$o[i], st$no[i]))),
                      c("All sites except 10 and 39", sum(d$high_site == 0), sum(d$bbs[d$high_site == 0]), "—", "—"))
 
-write_xlsx(lapply(MT, function(m) as.data.frame(m, stringsAsFactors = FALSE)), file.path(OUT_DIR, "manuscript_tables.xlsx"))
-saveRDS(MT, file.path(OUT_DIR, "manuscript_tables.rds"))
-message("09 manuscript tables written: ", length(MT), " tables")
+write_xlsx(lapply(MT, function(m) as.data.frame(m, stringsAsFactors = FALSE)), file.path(OUT_DIR, "results_tables.xlsx"))
+saveRDS(MT, file.path(OUT_DIR, "results_tables.rds"))
+message("08 results tables written: ", length(MT), " tables")

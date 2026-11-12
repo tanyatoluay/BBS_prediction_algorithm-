@@ -1,6 +1,6 @@
 # =============================================================================
-# 08 — All Score A–dependent values for the manuscript (re-derived Score A, thresholds THR_LO/THR_HI)
-#      Runs after 01–05 in the same session. Writes output/manuscript_values.json (formatted, mid-dot decimals)
+# 07 — Reported values: every number reported in the text, formatted as in the manuscript
+#      Runs after 01–06 in the same session. Writes output/results_values.json (mid-dot decimals)
 # =============================================================================
 md <- function(x, d = 1) chartr(".", "·", formatC(x, format = "f", digits = d))
 pc <- function(k, n, d = 1) md(100 * k / n, d)
@@ -108,5 +108,5 @@ S14 <- tableS14 %>% transmute(item, pts = scoreA, ge1 = md(pct_ge1), med = sprin
 T6u <- table6_model %>% filter(term %in% ITEMS) %>% transmute(term, new = SCORE_A_POINTS[term], legacy = SCORE_A_LEGACY[term])
 
 jsonlite::write_json(list(V = V, T4 = T4, T6 = T6, T6u = T6u, T7 = T7, T8 = T8, S4 = S4, S7 = S7, S8 = S8, S11 = S11, S14 = S14),
-                     file.path(OUT_DIR, "manuscript_values.json"), auto_unbox = TRUE, pretty = TRUE, na = "string")
-message("08 manuscript values written")
+                     file.path(OUT_DIR, "results_values.json"), auto_unbox = TRUE, pretty = TRUE, na = "string")
+message("07 results values written")

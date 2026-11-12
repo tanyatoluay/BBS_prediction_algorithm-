@@ -1,6 +1,6 @@
 ---
-title: "WEGIO V25.2 — step-by-step statistical validation"
-subtitle: "Independent re-analysis in R of manuscript V25 from genetic database V21.0 and eCRF export V4.0"
+title: "WEGIO — step-by-step statistical analysis"
+subtitle: "Analysis in R of genetic database V21.0 and eCRF export V4.0, with one decision per step"
 author: "Tanya Deniz Toluay Coşkun — Data Science and Artificial Intelligence Institute, Boğaziçi University"
 date: "`r format(Sys.Date(), '%d %B %Y')`"
 output:
@@ -24,7 +24,7 @@ decision <- function(...) cat("\n\n> **Decision.** ", ..., "\n\n", sep = "")
 
 # How to read this report
 
-Every step runs one script of the R workflow (`R_workflow_V25/R`) on the patient-level data and shows the result. Where an analytical choice is needed, it is made **on the basis of the current data** and stated in a *Decision* box. Values marked "V25" are those printed in manuscript V25, which was analysed in Python. The automated comparison of 67 values is in step 10.
+Every step runs one script of the R workflow (`R_workflow_V25/R`) on the patient-level data and shows the result. Where an analytical choice is needed, it is made **on the basis of the current data** and stated in a *Decision* box. Every result is produced from the source data by the scripts in `R_workflow_V25/R`.
 
 # Step 1 — Analysis dataset
 
@@ -143,14 +143,6 @@ src("06_figures.R")
 
 ```{r figs, out.width="100%"}
 knitr::include_graphics(file.path(OUT_DIR, "figures", c("Figure3_scoreA_criteria.png", "FigureS1_calibration.png", "FigureS2_adults_by_route.png")), rel_path = FALSE)
-```
-
-# Step 10 — Agreement with manuscript V25
-
-```{r step10, results='asis'}
-src("07_check_manuscript.R")
-kable(chk %>% dplyr::filter(match != "exact"), caption = "Values not reproduced exactly (all others: exact)")
-cat(sprintf("\n%d of %d checked values reproduce exactly or within rounding/Monte Carlo error.\n", sum(chk$match != "DIFFERS"), nrow(chk)))
 ```
 
 # Software
