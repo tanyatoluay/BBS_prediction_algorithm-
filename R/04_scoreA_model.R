@@ -44,6 +44,7 @@ table6_model <- tibble(term = names(b), beta = b, OR = exp(b),
 pts0 <- setNames(table6_model$points_reestimated[match(ITEMS, table6_model$term)], ITEMS)
 score_from_points <- function(d, pts) drop(as.matrix(d[, ITEMS]) %*% pts[ITEMS])
 dat$score_rederived <- score_from_points(dat, pts0)
+if (!all(pts0[names(SCORE_A_POINTS)] == SCORE_A_POINTS)) warning("Re-derived points differ from SCORE_A_POINTS: ", paste(names(pts0), pts0, collapse = ", "))
 
 # ---- 3. Bootstrap internal validation (Harrell optimism, 500 resamples) ------------------------------------
 brier <- function(p, y) mean((p - y)^2)
@@ -89,14 +90,14 @@ calib <- dat %>% mutate(p = p_app, p_flic = plogis(lp_of(fit_flic, dat)),
 saveRDS(list(calib = calib, p = p_app, p_flic = plogis(lp_of(fit_flic, dat)), y = dat$bbs), file.path(OUT_DIR, "calibration.rds"))
 
 # ---- 5. Thresholds (table 6 lower) and Score A bands (table 7) --------------------------------------------------------
-thr_tab <- function(d, score = "scoreA", ks = 1:13) map_dfr(ks, function(k) {
+thr_tab <- function(d, score = "scoreA", ks = 1:sum(SCORE_A_POINTS)) map_dfr(ks, function(k) {
   t <- as.integer(d[[score]] >= k); tp <- sum(t & d$bbs == 1); fp <- sum(t & d$bbs == 0)
   fn <- sum(!t & d$bbs == 1); tn <- sum(!t & d$bbs == 0)
   tibble(threshold = k, n = tp + fp, pct = 100 * (tp + fp) / nrow(d), bbs = tp,
          sens = fmt_ci(tp, tp + fn), spec = fmt_ci(tn, tn + fp),
          ppv = if (tp + fp > 0) fmt_ci(tp, tp + fp) else NA, npv = round(100 * tn / (tn + fn), 1)) })
 table6_thr <- thr_tab(dat)
-table7 <- dat %>% mutate(band = cut(scoreA, c(-Inf, 2, 5, 8, Inf), labels = c("0–2", "3–5", "6–8", "≥9"))) %>%
+table7 <- dat %>% mutate(band = cut(scoreA, c(-Inf, 2, 3, 6, Inf), labels = c("0–2", "3", "4–6", "≥7"))) %>%
   group_by(band) %>% summarise(n = n(), bbs = sum(bbs), nonBBS_ob = sum(grp4 == 2), nonob = sum(grp4 == 3), none = sum(grp4 == 4),
     p_bbs = fmt_ci(bbs, n), p_obgd = fmt_ci(bbs + nonBBS_ob, n), p_gd = fmt_ci(bbs + nonBBS_ob + nonob, n))
 
@@ -107,7 +108,7 @@ perf_pop <- function(d, label) {
   f <- function(v) { tp <- sum(d[[v]] & d$bbs == 1); sp <- 100 * mean(d[[v]][d$bbs == 0] == 0)
     sprintf("%d (%.1f); %.1f", tp, 100 * tp / sum(d$bbs), sp) }
   tibble(population = label, N = nrow(d), BBS = sum(d$bbs), auc = fmt_auc(a),
-         scoreA3 = f("scoreA3"), scoreA5 = f("scoreA5"), beales = f("beales"), ern = f("ern"))
+         scoreA3 = f("scoreA3"), scoreAhi = f("scoreAhi"), beales = f("beales"), ern = f("ern"))
 }
 catA <- dat %>% mutate(bbs = as.integer(bbs_cat %in% "A"))
 table8 <- bind_rows(
@@ -147,7 +148,7 @@ loso <- map_dfr(sort(unique(dat$site)), function(s) { d <- filter(dat, site != s
 loso_range <- range(loso$auc)
 
 # ---- 8. Predictive values at lower prevalence (table S15) ---------------------------------------------------------------
-se5 <- mean(dat$scoreA5[dat$bbs == 1]); sp5 <- mean(dat$scoreA5[dat$bbs == 0] == 0)
+se5 <- mean(dat$scoreAhi[dat$bbs == 1]); sp5 <- mean(dat$scoreAhi[dat$bbs == 0] == 0)
 tableS15 <- tibble(prev = c(.001, .005, .01, .02, mean(dat$bbs), .05)) %>%
   mutate(ppv = 100 * se5 * prev / (se5 * prev + (1 - sp5) * (1 - prev)),
          npv = 100 * sp5 * (1 - prev) / (sp5 * (1 - prev) + (1 - se5) * prev))

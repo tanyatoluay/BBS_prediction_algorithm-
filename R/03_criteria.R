@@ -15,7 +15,7 @@ diag_acc <- function(test, ref) {
          tp = tp, fn = fn, fp = fp, tn = tn)
 }
 RULES  <- c(clin_dx = "Clinical diagnosis before enrolment", ern = "ERN criteria", beales = "Beales criteria",
-            beales_v25 = "Beales (V25 counting)", scoreA3 = "Score A ≥3", scoreA5 = "Score A ≥5")
+            beales_v25 = "Beales (V25 counting)", scoreA3 = paste0("Score A ≥", THR_LO), scoreAhi = paste0("Score A ≥", THR_HI))
 STRATA <- list(All = rep(TRUE, nrow(dat)), `<18` = dat$age18 %in% "<18", `>=18` = dat$age18 %in% ">=18",
                `<16` = dat$age16 %in% "<16", `>=16` = dat$age16 %in% ">=16")
 table4 <- imap_dfr(RULES, function(lab, r) imap_dfr(STRATA, function(s, sl)
@@ -26,14 +26,14 @@ mcn <- function(a, b) { tb <- table(factor(a, 0:1), factor(b, 0:1));
   list(b10 = tb[2, 1], b01 = tb[1, 2], p = binom.test(tb[2, 1], tb[2, 1] + tb[1, 2])$p.value) }
 bb <- filter(dat, bbs == 1)
 mcnemar_res <- tibble(
-  comparison = c("Score A>=5 vs Beales", "Score A>=5 vs ERN", "Beales vs ERN"),
-  only_first = c(mcn(bb$scoreA5, bb$beales)$b10, mcn(bb$scoreA5, bb$ern)$b10, mcn(bb$beales, bb$ern)$b10),
-  only_second = c(mcn(bb$scoreA5, bb$beales)$b01, mcn(bb$scoreA5, bb$ern)$b01, mcn(bb$beales, bb$ern)$b01),
-  exact_p = c(mcn(bb$scoreA5, bb$beales)$p, mcn(bb$scoreA5, bb$ern)$p, mcn(bb$beales, bb$ern)$p))
+  comparison = c("Score A>=hi vs Beales", "Score A>=hi vs ERN", "Beales vs ERN"),
+  only_first = c(mcn(bb$scoreAhi, bb$beales)$b10, mcn(bb$scoreAhi, bb$ern)$b10, mcn(bb$beales, bb$ern)$b10),
+  only_second = c(mcn(bb$scoreAhi, bb$beales)$b01, mcn(bb$scoreAhi, bb$ern)$b01, mcn(bb$beales, bb$ern)$b01),
+  exact_p = c(mcn(bb$scoreAhi, bb$beales)$p, mcn(bb$scoreAhi, bb$ern)$p, mcn(bb$beales, bb$ern)$p))
 
 # Table S11: evidence categories
 tableS11 <- bb %>% group_by(bbs_cat) %>% summarise(n = n(), lt18 = sum(age18 == "<18"), beales = sum(beales),
-  ern = sum(ern), scoreA5 = sum(scoreA5), clin_dx = sum(clin_dx), ids = paste(id, collapse = ", "))
+  ern = sum(ern), scoreAhi = sum(scoreAhi), clin_dx = sum(clin_dx), ids = paste(id, collapse = ", "))
 
 # Table S2: export (eligibility checklist only) vs all items
 s2 <- function(v) c(all = sum(dat[[v]]), bbs = sum(dat[[v]][dat$bbs == 1]),
@@ -46,7 +46,7 @@ export_not_all <- dat %>% filter(beales_export == 1, beales == 0) %>% select(id,
 
 # criteria by molecular status (table 4 footnote)
 by_molecular <- bb %>% mutate(mol = if_else(bbs_cat %in% c("A", "B1"), "rule met", "below rule")) %>%
-  group_by(mol) %>% summarise(n = n(), beales = sum(beales), scoreA3 = sum(scoreA3), scoreA5 = sum(scoreA5))
+  group_by(mol) %>% summarise(n = n(), beales = sum(beales), scoreA3 = sum(scoreA3), scoreAhi = sum(scoreAhi))
 
 write_xlsx(list(table4 = table4, mcnemar = mcnemar_res, tableS11 = tableS11, tableS2 = tableS2,
                 export_not_all_items = export_not_all, by_molecular = by_molecular),

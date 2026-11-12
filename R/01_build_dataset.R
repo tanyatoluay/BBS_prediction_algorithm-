@@ -105,8 +105,21 @@ per_id <- gen_all %>% filter(cg_number %in% groups$id) %>%
     .groups = "drop") %>%
   mutate(index = as.integer(relation == "index"))   # 983 index; 21 relatives fulfilling eligibility
 
+
+# ---- 3b. Subgroups of group 2 (methods: 2a = obesity as a core feature; 2b = syndromic, variable obesity) -----
+# Rule applied to the P/LP primary findings in V21.0: 2a if a P/LP variant in MC4R, LEPR (leptin–melanocortin
+# pathway) or PHIP (Chung–Jansen syndrome), or a deletion at 16p11.2, 6q15–q16 (incl. SIM1) or 17p11.2
+# (Smith–Magenis syndrome); all other group 2 diagnoses are 2b.
+g2_find <- gen_all %>% filter(cg_number %in% groups$id[groups$group == "Non-BBS obesity-associated"],
+                              str_detect(finding_primary_class, "Class [12]")) %>%
+  transmute(id = cg_number, gene = str_squish(finding_primary_gene))
+core_gene <- c("MC4R", "LEPR", "PHIP")
+core_cnv  <- "16p11\\.2\\(|6q1[56]|17p11\\.2\\("
+g2_sub <- g2_find %>% group_by(id) %>%
+  summarise(sub2 = if_else(any(gene %in% core_gene | (str_detect(gene, core_cnv) & str_detect(gene, "x1$"))), "2a", "2b"), .groups = "drop")
+
 # ---- 3. Merge -----------------------------------------------------------------------
-dat <- groups %>% inner_join(ecrf, by = "id") %>% left_join(per_id, by = c("id" = "cg_number"))
+dat <- groups %>% inner_join(ecrf, by = "id") %>% left_join(per_id, by = c("id" = "cg_number")) %>% left_join(g2_sub, by = "id")
 stopifnot(nrow(dat) == 1004)
 
 dat <- dat %>% mutate(
@@ -173,18 +186,29 @@ dat <- dat %>% mutate(
   beales_export = as.integer(exp_beales_met == "Yes"),
   ern_export    = as.integer(exp_ern_met == "Yes"),
   # Score A
-  scoreA = 5 * poly + 2 * retinal + 2 * hypog_genital + 2 * renal + synbrachy + nd,
-  scoreA_noret = scoreA - 2 * retinal,
-  scoreA3 = as.integer(scoreA >= 3), scoreA5 = as.integer(scoreA >= 5)
+  scoreA = SCORE_A_POINTS[["poly"]] * poly + SCORE_A_POINTS[["retinal"]] * retinal + SCORE_A_POINTS[["hypog_genital"]] * hypog_genital +
+           SCORE_A_POINTS[["renal"]] * renal + SCORE_A_POINTS[["synbrachy"]] * synbrachy + SCORE_A_POINTS[["nd"]] * nd,
+  scoreA_noret = scoreA - SCORE_A_POINTS[["retinal"]] * retinal,
+  scoreA3 = as.integer(scoreA >= THR_LO), scoreAhi = as.integer(scoreA >= THR_HI),
+  # legacy Score A (V25) for the reproduction check
+  scoreA_legacy = 5 * poly + 2 * retinal + 2 * hypog_genital + 2 * renal + synbrachy + nd,
+  scoreA_legacy3 = as.integer(scoreA_legacy >= 3), scoreA_legacy5 = as.integer(scoreA_legacy >= 5)
 )
 
 # Score A with not-assessed items counted as present
 pres_or_na <- function(f) as.integer(dat[[paste0(f, "_3")]] != "absent")
-dat$scoreA_napres <- 5 * pres_or_na("poly") + 2 * pres_or_na("retinal") + 2 * pres_or_na("hypog_genital") +
-  2 * pres_or_na("renal") + pres_or_na("synbrachy") + pres_or_na("nd")
+dat$scoreA_napres <- SCORE_A_POINTS[["poly"]] * pres_or_na("poly") + SCORE_A_POINTS[["retinal"]] * pres_or_na("retinal") +
+  SCORE_A_POINTS[["hypog_genital"]] * pres_or_na("hypog_genital") + SCORE_A_POINTS[["renal"]] * pres_or_na("renal") +
+  SCORE_A_POINTS[["synbrachy"]] * pres_or_na("synbrachy") + SCORE_A_POINTS[["nd"]] * pres_or_na("nd")
 dat$scoreA_complete <- with(dat, poly_3 != "not_assessed" & retinal_3 != "not_assessed" &
   hypog_genital_3 != "not_assessed" & renal_3 != "not_assessed" & synbrachy_3 != "not_assessed" &
   nd_3 != "not_assessed")
+
+# ---- 4b. Hyperphagia: recorded only in the paediatric checklist -> missing (NA) where the checklist was not completed.
+#      All comparisons of hyperphagia use assessed participants only (decision 12 Nov 2026). Composite measures
+#      (feature/domain counts) and the multivariable non-BBS model keep the primary coding (hyperphagia_any).
+dat$hyperphagia_any <- dat$hyperphagia
+dat$hyperphagia[!dat$hyperphagia_assessed] <- NA_integer_
 
 # ---- 5. Cross-check of BBS evidence categories against V21.0 VUS tiers -------------------
 bbs_vus <- gen_all %>% filter(cg_number %in% unlist(BBS_CAT), str_detect(finding_primary_class, "Class 3")) %>%

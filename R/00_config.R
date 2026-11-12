@@ -27,8 +27,12 @@ N_BOOT_AUC  <- 2000       # bootstrap CI for AUCs (table 8)
 N_PERM      <- 5000       # Monte Carlo exact test
 HIGH_BBS_SITES <- c("10", "39")
 
-# Score A (fixed points; derived in an earlier analysis of the same cohort)
-SCORE_A_POINTS <- c(poly = 5, retinal = 2, hypog_genital = 2, renal = 2, synbrachy = 1, nd = 1)
+# Score A — re-derived on V21.0 / eCRF V4.0 (Firth, round(beta), >=1 point if beta > 0.25; 04c)
+SCORE_A_POINTS  <- c(poly = 5, retinal = 2, hypog_genital = 1, renal = 1, synbrachy = 1, nd = 1)   # max 11
+# legacy Score A (earlier analysis, used in manuscript V25) — kept for the V25 reproduction check
+SCORE_A_LEGACY  <- c(poly = 5, retinal = 2, hypog_genital = 2, renal = 2, synbrachy = 1, nd = 1)   # max 13
+THR_LO <- 3   # highest threshold retaining maximal sensitivity (04c)
+THR_HI <- 4   # maximum optimism-corrected Youden index (04c)
 
 # ---- BBS evidence categories (manuscript table S11, as specified by VSK 27 Oct 2026) ----
 # Categories are not a column in V21.0. They are read from a LOCAL file kept next to the data
@@ -69,3 +73,5 @@ auc_boot_ci <- function(score, y, B = N_BOOT_AUC, seed = SEED_BOOT) {
   c(auc = auc_fast(score, y), lo = unname(quantile(bt, .025)), hi = unname(quantile(bt, .975)))
 }
 fmt_auc <- function(a) sprintf("%.3f (%.3f–%.3f)", a[1], a[2], a[3])
+# number with mid-dot decimal separator (manuscript style)
+md <- function(x, d = 1) ifelse(is.na(x), "—", chartr(".", "·", formatC(x, format = "f", digits = d)))

@@ -4,7 +4,7 @@
 dat <- readRDS(file.path(OUT_DIR, "wegio_analysis_dataset.rds"))
 set.seed(SEED_BOOT)
 
-BIN_VARS <- c(age_lt16 = "Age <16 years", female = "Female sex", white = "White ethnicity",
+BIN_VARS <- c(age_lt18 = "Age <18 years", female = "Female sex", white = "White ethnicity",
   clin_dx = "Clinical diagnosis of BBS before enrolment", retinal = "Retinal dystrophy",
   visual = "Visual loss or optic atrophy", poly = "Polydactyly", syn = "Syndactyly", brachy = "Brachydactyly",
   renal = "Renal anomaly or dysfunction", hypog = "Hypogonadism", hypog_genital = "Hypogonadism or micropenis",
@@ -13,23 +13,23 @@ BIN_VARS <- c(age_lt16 = "Age <16 years", female = "Female sex", white = "White 
   seizures = "Seizures", hyperphagia = "Hyperphagia", dental = "Dental crowding or hypodontia",
   hypert = "Arterial hypertension", cardiomyo = "Cardiomyopathy", hyperpig = "Hyperpigmented skin",
   dom3 = "≥3 affected organ-system domains", beales = "Beales criteria met", ern = "ERN criteria met")
-dat$age_lt16 <- as.integer(dat$age16 == "<16")   # NA age -> NA
+dat$age_lt18 <- as.integer(dat$age18 == "<18")   # NA age -> NA (primary split)
 
-mc_p <- function(x, g) {   # Monte Carlo exact (Fisher) test, 5000 replicates
+exact_p <- function(x, g) {   # Fisher–Freeman–Halton exact test (r x 2 tables; computed exactly, no simulation)
   ok <- !is.na(x); tb <- table(g[ok, drop = TRUE], x[ok])
   if (ncol(tb) < 2) return(NA_real_)
-  fisher.test(tb, simulate.p.value = TRUE, B = N_PERM)$p.value
+  fisher.test(tb, workspace = 2e8)$p.value
 }
 kw_p <- function(x, g) { ok <- !is.na(x); kruskal.test(x[ok], droplevels(g[ok]))$p.value }
-fmt_p <- function(p) ifelse(is.na(p), "—", ifelse(p < 0.001, "<0.001", sprintf("%.2f", p)))
+fmt_p <- function(p) ifelse(is.na(p), "—", ifelse(p < 0.001, "<0.001", ifelse(p < 0.01, sprintf("%.3f", p), sprintf("%.2f", p))))
 
 g3 <- dat$grp4 %in% 1:3
 tab1_bin <- map_dfr(names(BIN_VARS), function(v) {
   x <- dat[[v]]
-  cells <- map_chr(levels(dat$group), ~ { xx <- x[dat$group == .x]; npct(sum(xx, na.rm = TRUE), length(xx)) })
+  cells <- map_chr(levels(dat$group), ~ { xx <- x[dat$group == .x]; if (v == "hyperphagia") sprintf("%s [n=%d]", npct(sum(xx, na.rm = TRUE), sum(!is.na(xx))), sum(!is.na(xx))) else npct(sum(xx, na.rm = TRUE), length(xx)) })
   tibble(Characteristic = BIN_VARS[[v]], !!!setNames(as.list(cells), levels(dat$group)),
-         Overall = npct(sum(x, na.rm = TRUE), length(x)),
-         p3 = mc_p(x[g3], dat$group[g3]), p4 = mc_p(x, dat$group))
+         Overall = if (v == "hyperphagia") sprintf("%s [n=%d]", npct(sum(x, na.rm = TRUE), sum(!is.na(x))), sum(!is.na(x))) else npct(sum(x, na.rm = TRUE), length(x)),
+         p3 = exact_p(x[g3], dat$group[g3]), p4 = exact_p(x, dat$group))
 })
 cont <- list(
   "Age at enrolment, years"          = list(v = "age_y", f = function(g) TRUE, d = 1),
@@ -82,7 +82,7 @@ T5_VARS <- c("retinal", "visual", "poly", "synbrachy", "renal", "hypog_genital",
              "dental", "hypert", "dom3", "beales", "clin_dx")
 age_compare <- function(split) map_dfr(levels(dat$group), function(gname) map_dfr(T5_VARS, function(v) {
   s <- dat %>% filter(group == gname, !is.na(.data[[split]]))
-  a <- s[[v]][s[[split]] == levels(s[[split]])[1]]; b <- s[[v]][s[[split]] == levels(s[[split]])[2]]
+  a <- na.omit(s[[v]][s[[split]] == levels(s[[split]])[1]]); b <- na.omit(s[[v]][s[[split]] == levels(s[[split]])[2]])
   tibble(group = gname, feature = v, young = sprintf("%d/%d", sum(a), length(a)), old = sprintf("%d/%d", sum(b), length(b)),
          p = fisher.test(matrix(c(sum(a), length(a) - sum(a), sum(b), length(b) - sum(b)), 2))$p.value)
 }))
@@ -101,9 +101,11 @@ tableS5 <- map_dfr(pairs, function(pr) {
   map_dfr(S5_VARS, function(v) {
     tb <- table(factor(s$grp4, levels = pr), factor(s[[v]], levels = c(1, 0)))
     ft <- fisher.test(tb)
+    a <- tb[1, 1]; b <- tb[1, 2]; c <- tb[2, 1]; d_ <- tb[2, 2]
     tibble(comparison = paste(levels(dat$group)[pr], collapse = " vs "), feature = v,
-           first = sprintf("%d/%d", tb[1, 1], sum(tb[1, ])), second = sprintf("%d/%d", tb[2, 1], sum(tb[2, ])),
-           OR = unname(ft$estimate), p = ft$p.value)
+           first = sprintf("%d/%d", a, a + b), second = sprintf("%d/%d", c, c + d_),
+           OR = (a + .5) * (d_ + .5) / ((b + .5) * (c + .5)),       # Haldane–Anscombe corrected odds ratio
+           OR_cond_mle = unname(ft$estimate), p = ft$p.value)
   }) %>% mutate(p_adj_within = p.adjust(p, "BH"))
 }) %>% mutate(p_adj_all144 = p.adjust(p, "BH"))
 

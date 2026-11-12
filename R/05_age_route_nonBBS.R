@@ -21,7 +21,7 @@ route_tests <- tibble(
 # Score A within routes (retinal item is an entry criterion in the adult route)
 route_auc <- dat %>% filter(age18 == ">=18") %>% group_by(route) %>% filter(sum(bbs) > 0, sum(bbs) < n()) %>%
   summarise(auc_scoreA = auc_fast(scoreA, bbs), auc_noret = auc_fast(scoreA_noret, bbs),
-            sens5 = sum(scoreA5 & bbs), n = n(), n_bbs = sum(bbs), .groups = "drop")
+            senshi = sum(scoreAhi & bbs), n = n(), n_bbs = sum(bbs), .groups = "drop")
 
 # ---- 2. Age comparison restricted to participants in whom the feature was assessed -------------------
 # Hyperphagia exists only in the paediatric checklist: absent checklist = structurally missing, not "absent".
@@ -30,7 +30,8 @@ age_assessed <- map_dfr(c("retinal", "hyperphagia", "nd", "id_dis", "renal", "po
   assessed <- if (f == "hyperphagia") d$hyperphagia_assessed else d[[paste0(f, "_3")]] != "not_assessed"
   map_dfr(c("primary (not assessed = absent)", "assessed only"), function(m) {
     s <- if (m == "assessed only") d[assessed, ] else d
-    y <- s[[f]][s$age18 == "<18"]; o <- s[[f]][s$age18 == ">=18"]
+    v <- if (f == "hyperphagia") s$hyperphagia_any else s[[f]]
+    y <- v[s$age18 == "<18"]; o <- v[s$age18 == ">=18"]
     tibble(feature = f, handling = m, lt18 = sprintf("%d/%d", sum(y), length(y)), ge18 = sprintf("%d/%d", sum(o), length(o)),
            p = fisher.test(matrix(c(sum(y), length(y) - sum(y), sum(o), length(o) - sum(o)), 2))$p.value)
   })
@@ -39,7 +40,7 @@ age_assessed <- map_dfr(c("retinal", "hyperphagia", "nd", "id_dis", "renal", "po
 # ---- 3. Non-BBS genetic disease (table S6) ---------------------------------------------------------------------------
 # 16 candidate features (assumed list; V25 does not enumerate them -> please confirm)
 S6_FEATS <- c("male", "retinal", "visual", "poly", "synbrachy", "renal", "hypog_genital", "cog", "id_dis", "speech",
-              "motor", "ataxia", "seizures", "hyperphagia", "dental", "hypert")
+              "motor", "ataxia", "seizures", "hyperphagia_any", "dental", "hypert")   # model: primary coding
 nb <- filter(dat, bbs == 0)
 s6_fit <- function(y) {
   f <- reformulate(S6_FEATS, response = y)

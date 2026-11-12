@@ -1,0 +1,160 @@
+---
+title: "WEGIO V25.2 — step-by-step statistical validation"
+subtitle: "Independent re-analysis in R of manuscript V25 from genetic database V21.0 and eCRF export V4.0"
+author: "Tanya Deniz Toluay Coşkun — Data Science and Artificial Intelligence Institute, Boğaziçi University"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  word_document:
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, dpi = 300)
+# Render from the data folder:
+#   Rscript -e 'rmarkdown::render("R_workflow_V25/WEGIO_V25_step_by_step_validation.Rmd", knit_root_dir = getwd())'
+R_DIR <- file.path("R_workflow_V25", "R")
+src <- function(f) source(file.path(R_DIR, f), local = knitr::knit_global())
+src("00_config.R")
+library(knitr)
+r <- function(df, d = 3) dplyr::mutate(df, dplyr::across(where(is.double), ~ round(.x, d)))
+pct <- function(x, d = 1) sprintf(paste0("%.", d, "f%%"), 100 * x)
+decision <- function(...) cat("\n\n> **Decision.** ", ..., "\n\n", sep = "")
+```
+
+# How to read this report
+
+Every step runs one script of the R workflow (`R_workflow_V25/R`) on the patient-level data and shows the result. Where an analytical choice is needed, it is made **on the basis of the current data** and stated in a *Decision* box. Values marked "V25" are those printed in manuscript V25, which was analysed in Python. The automated comparison of 67 values is in step 10.
+
+# Step 1 — Analysis dataset
+
+```{r step1, results='asis'}
+src("01_build_dataset.R")
+cat(sprintf("- Participants after merging V21.0 (sheet `groups`) and eCRF V4.0: **%d** (all IDs matched).\n", nrow(dat)))
+cat(sprintf("- Index participants %d; relatives fulfilling eligibility %d.\n", sum(dat$index), sum(dat$index == 0)))
+kable(as.data.frame(table(Group = dat$group)), caption = "Genetic groups as assigned in V21.0")
+kable(bbs_vus %>% dplyr::count(bbs_cat, tier_V21_colJ, tier_V18_6_ARO, name = "alleles"),
+      caption = "VUS tiers of BBS alleles: V21.0 column J vs ARO V18.6 re-scoring, by evidence category")
+decision("Groups are taken unchanged from V21.0 (inheritance-specific rule of 27 October 2026). Category B1 depends on ",
+         "which VUS-tier source is authoritative (column J vs V18.6) — open question to VSK; categories are read from ",
+         "`bbs_evidence_categories.csv`.")
+```
+
+# Step 2 — Clinical features and missing data
+
+```{r step2, results='asis'}
+na_tab <- tibble::tibble(
+  feature = c("retinal", "renal", "hypog_genital", "poly", "nd", "hyperphagia"),
+  present = sapply(feature, function(f) sum(dat[[paste0(f, "_3")]] == "present")),
+  absent = sapply(feature, function(f) sum(dat[[paste0(f, "_3")]] == "absent")),
+  not_assessed = sapply(feature, function(f) sum(dat[[paste0(f, "_3")]] == "not_assessed")))
+kable(na_tab, caption = "Three-state documentation (eCRF items combined across sections)")
+cat(sprintf("\nHyperphagia exists only in the paediatric checklist; it is structurally missing for %d participants (adults with BBS: %d of %d assessed).\n",
+            sum(!dat$hyperphagia_assessed), sum(dat$hyperphagia_assessed[dat$bbs == 1 & dat$age18 %in% ">=18"]),
+            sum(dat$bbs == 1 & dat$age18 %in% ">=18")))
+decision("Primary analysis: not assessed = absent (sensitivity analyses: as present; complete case). ",
+         "Structurally missing items (hyperphagia) are **not** compared between age strata except among participants with the checklist.")
+```
+
+# Step 3 — Yield and descriptive comparisons
+
+```{r step3, results='asis'}
+src("02_descriptives.R")
+kable(table2, caption = "Table 2 — genetic disease by age stratum (Wilson 95% CI; Fisher p)")
+kable(table1 %>% dplyr::select(Characteristic, BBS, Overall, p3, p4) %>% head(12), caption = "Table 1 (excerpt)")
+cat(sprintf("\nPairwise comparisons: %d of 144 significant within comparison (BH), %d across all 144.\n",
+            sum(tableS5$p_adj_within < .05), sum(tableS5$p_adj_all144 < .05)))
+decision("Yield reproduced exactly (144/1004, 14·3%). Group comparisons use the Fisher–Freeman–Halton exact test (exact, no simulation); ",
+         "pairwise comparisons Fisher exact with Haldane–Anscombe OR and BH correction across 24 features.")
+```
+
+# Step 4 — Age strata and eligibility route
+
+```{r step4, results='asis'}
+src("05_age_route_nonBBS.R")
+kable(route_tab %>% dplyr::filter(age18 == ">=18") %>% dplyr::select(route, n, protocol_dev, n_retinal, n_BBS, BBS_pct, genetic_pct, spec_retinal_nonBBS),
+      caption = "Adults by documented eligibility route")
+kable(r(route_tests, 4), caption = "Route comparison")
+kable(r(age_assessed, 4), caption = "BBS: <18 vs ≥18, primary handling vs assessed only")
+decision("Primary split <18/≥18 (eligibility). The ≥18 stratum is reported by documented route; age contrasts are interpreted as ",
+         "selection and documentation, not disease course.")
+```
+
+# Step 5 — Clinical criteria
+
+```{r step5, results='asis'}
+src("03_criteria.R")
+kable(tableS2, caption = "Beales/ERN: export (checklist only) vs all items; Beales with V25 double counting")
+kable(table4 %>% dplyr::filter(stratum == "All") %>% dplyr::select(criterion, identified, sens, spec, selected, ppv, npv),
+      caption = "Table 4 (all participants)")
+kable(r(mcnemar_res, 5), caption = "Exact McNemar within BBS")
+decision("Syndactyly/brachydactyly counted as **one** Beales secondary feature (Beales 1999; V25 Methods): 88 meet the criteria, 62 without BBS. ",
+         "ERN operationalised with clinical items only.")
+```
+
+# Step 6 — Firth model and Score A points
+
+```{r step6, results='asis'}
+src("04_scoreA_model.R")
+kable(r(table6_model %>% dplyr::select(term, beta, OR, OR_pl_lo, OR_pl_hi, p_pl, OR_wald_lo, OR_wald_hi, scoreA_points, points_reestimated), 3),
+      caption = "Firth model (seven prespecified items, age per 10 years, male sex)")
+kable(r(delong_res, 4), caption = "Score A vs ordinal Beales count (DeLong; bootstrap CI)")
+decision("CIs and p values from the profile penalised likelihood (Wald intervals are unreliable with 38 events). ",
+         "The seven items are prespecified cardinal BBS features (fixed list in the original derivation code) — **please confirm**.")
+```
+
+# Step 7 — Validation of the complete derivation procedure
+
+```{r step7, results='asis'}
+src("04b_full_validation.R")
+kable(r(validation %>% dplyr::select(auc_model_apparent, auc_model_corrected, auc_score_rederived_corrected, cal_slope_corrected, brier_apparent, brier_corrected, citl_firth_apparent, citl_flic_apparent), 3),
+      caption = "Bootstrap optimism (500 resamples): model and re-derived score")
+kable(r(corrected %>% dplyr::select(score, auc, auc_corr, senshi, senshi_corr, spechi, spechi_corr, sens3_corr, spec3_corr), 3),
+      caption = "Complete procedure: apparent and optimism-corrected")
+kable(r(cv_summary, 3), caption = "Repeated stratified 10-fold cross-validation (20 repeats)")
+kable(site_ext %>% dplyr::mutate(auc_val = round(auc_val, 3), spechi = round(spechi, 1)),
+      caption = "Internal–external validation: derived at sites 10/39, tested at the other 35 sites")
+decision("Report procedure-corrected performance (AUC, sensitivity and specificity with threshold selection inside the bootstrap) ",
+         "instead of apparent values; report the site-split result as the main indication of transportability.")
+```
+
+# Step 8 — Selection of points and threshold on the current data
+
+```{r step8, results='asis'}
+src("04c_rederive_score.R")
+kable(r(point_stability, 1), caption = "Points: legacy Score A vs re-derived on V21.0; % of 500 resamples with the same value")
+kable(r(threshold_choice %>% dplyr::select(score, threshold, selected, bbs_identified, sens_corr, spec_corr, youden_corr, chosen), 3),
+      caption = "Optimism-corrected sensitivity/specificity by threshold (complete procedure)")
+kable(r(h2h, 3), caption = "Candidate scores at their data-chosen thresholds")
+decision("Threshold chosen by the maximum optimism-corrected Youden index. Legacy Score A: ≥", chosen_k$threshold[chosen_k$score == "legacy_scoreA"],
+         " (confirms the carried-forward threshold). Re-derived V21 score (hypogonadism and renal 1 point; max 11): ≥",
+         chosen_k$threshold[chosen_k$score == "rederived_V21"], ", which flags the same participants with BBS. ",
+         "**Adopted (12 Nov 2026): the re-derived score is Score A (points 5/2/1/1/1/1, max 11), main threshold ≥4, rule-out threshold ≥3.**")
+```
+
+# Step 9 — Sensitivity analyses and calibration
+
+```{r step9, results='asis'}
+kable(table8, caption = "Table 8 — reference standards and populations (bootstrap 95% CI, 2000 resamples)")
+kable(r(s7_extra, 3), caption = "Retinal item removed; three-state handling")
+cat(sprintf("\nLeave-one-site-out AUC range %.3f–%.3f.\n", min(loso$auc), max(loso$auc)))
+src("06_figures.R")
+```
+
+```{r figs, out.width="100%"}
+knitr::include_graphics(file.path(OUT_DIR, "figures", c("Figure3_scoreA_criteria.png", "FigureS1_calibration.png", "FigureS2_adults_by_route.png")), rel_path = FALSE)
+```
+
+# Step 10 — Agreement with manuscript V25
+
+```{r step10, results='asis'}
+src("07_check_manuscript.R")
+kable(chk %>% dplyr::filter(match != "exact"), caption = "Values not reproduced exactly (all others: exact)")
+cat(sprintf("\n%d of %d checked values reproduce exactly or within rounding/Monte Carlo error.\n", sum(chk$match != "DIFFERS"), nrow(chk)))
+```
+
+# Software
+
+```{r session}
+cat(R.version.string, "\n"); cat(paste(sapply(c("logistf", "pROC", "binom", "exact2x2", "dplyr", "ggplot2"), function(p) paste(p, packageVersion(p))), collapse = "; "))
+```
